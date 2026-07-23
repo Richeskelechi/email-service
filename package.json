@@ -1,0 +1,40 @@
+{
+  "name": "my-email",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first multi-tenant email delivery platform",
+  "scripts": {
+    "dev": "node --watch -r ts-node/register/transpile-only src/main.ts",
+    "dev:worker": "node --watch -r ts-node/register/transpile-only src/worker.ts",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "start:worker": "node dist/worker.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.6",
+    "@nestjs/core": "^11.1.6",
+    "@nestjs/platform-express": "^11.1.6",
+    "@nestjs/swagger": "^11.4.6",
+    "@prisma/client": "^5.22.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "dotenv": "^17.4.2",
+    "prisma": "^5.22.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^26.1.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
+}

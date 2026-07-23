@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ApiKeyMode {
+  test
+  live
+}
+
+enum MessageStatus {
+  accepted
+  sending
+  sent
+  simulated
+  failed
+}
+
+enum BatchStatus {
+  pending_fanout
+  expanding
+  ready
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  apiKeys  ApiKey[]
+  messages Message[]
+  batches  EmailBatch[]
+
+  @@map("organizations")
+}
+
+model ApiKey {
+  id             String     @id @default(cuid())
+  organizationId String     @map("organization_id")
+  name           String
+  mode           ApiKeyMode
+  keyPrefix      String     @map("key_prefix")
+  keyHash        String     @unique @map("key_hash")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  revokedAt      DateTime?  @map("revoked_at")
+  replacedById   String?    @map("replaced_by_id")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  replacedBy   ApiKey?      @relation("ApiKeyRotation", fields: [replacedById], references: [id])
+  replaces     ApiKey[]     @relation("ApiKeyRotation")
+  messages     Message[]
+  batches      EmailBatch[]
+
+  @@index([organizationId])
+  @@index([organizationId, mode, revokedAt])
+  @@map("api_keys")
+}
+
+model EmailBatch {
+  id             String      @id @default(cuid())
+  organizationId String      @map("organization_id")
+  apiKeyId       String?     @map("api_key_id")
+  mode           ApiKeyMode
+  status         BatchStatus @default(pending_fanout)
+  total          Int
+  fannedOut      Int         @default(0) @map("fanned_out")
+  subject        String
+  fromEmail      String      @map("from_email")
+  textBody       String?     @map("text_body")
+  htmlBody       String?     @map("html_body")
+  recipients     Json
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  apiKey       ApiKey?      @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  messages     Message[]
+
+  @@index([organizationId, createdAt])
+  @@index([status, createdAt])
+  @@map("email_batches")
+}
+
+model Message {
+  id             String        @id @default(cuid())
+  organizationId String        @map("organization_id")
+  apiKeyId       String?       @map("api_key_id")
+  batchId        String?       @map("batch_id")
+  mode           ApiKeyMode    @default(live)
+  status         MessageStatus @default(accepted)
+  fromEmail      String        @map("from_email")
+  toEmail        String        @map("to_email")
+  subject        String
+  textBody       String?       @map("text_body")
+  htmlBody       String?       @map("html_body")
+  errorMessage   String?       @map("error_message")
+  providerId     String?       @map("provider_id")
+  attempts       Int           @default(0)
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  sentAt         DateTime?     @map("sent_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  apiKey       ApiKey?      @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  batch        EmailBatch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([organizationId, createdAt])
+  @@index([mode, status])
+  @@index([batchId])
+  @@map("messages")
+}
