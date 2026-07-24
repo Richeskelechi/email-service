@@ -1,28 +1,28 @@
 import "reflect-metadata";
 import "dotenv/config";
 import { ValidationPipe } from "@nestjs/common";
-import { NestFactory } from "@nestjs/core";
+import { NestFactory, Reflector } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module";
-import { ErrorResponseDto } from "./common/dto/error-response.dto";
+import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
+import { ResponseInterceptor } from "./common/interceptors/response.interceptor";
 import { env } from "./config/env";
 import { prisma } from "./db/prisma";
-import {
-  AcceptEmailResponseDto,
-  MessageResponseDto,
-} from "./email/dto/message-response.dto";
-import { SendEmailDto } from "./email/dto/send-email.dto";
-import { BulkSendEmailDto } from "./email/dto/bulk-send-email.dto";
-import {
-  BulkAcceptResponseDto,
-  BulkMessagesResponseDto,
-  BulkStatusResponseDto,
-} from "./email/dto/bulk-response.dto";
-import { CreateOrganizationDto } from "./organizations/dto/create-organization.dto";
-import { OrganizationResponseDto } from "./organizations/dto/organization-response.dto";
+import { PermissionsService } from "./permissions/permissions.service";
+import { TemplatesService } from "./templates/templates.service";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  const permissionsService = app.get(PermissionsService);
+  console.log("[permissions] starting sync…");
+  await permissionsService.syncPermissions();
+  console.log("[permissions] sync finished");
+
+  const templatesService = app.get(TemplatesService);
+  console.log("[templates] starting system sync…");
+  await templatesService.syncSystemTemplates();
+  console.log("[templates] system sync finished");
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -32,6 +32,8 @@ async function bootstrap() {
       transformOptions: { enableImplicitConversion: true },
     }),
   );
+  app.useGlobalInterceptors(new ResponseInterceptor(app.get(Reflector)));
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle("my-email")
@@ -48,22 +50,18 @@ async function bootstrap() {
       },
       "api-key",
     )
+    .addBearerAuth(
+      {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "Session",
+        description: "Session token from POST /v1/auth/login",
+      },
+      "session",
+    )
     .build();
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig, {
-    extraModels: [
-      CreateOrganizationDto,
-      OrganizationResponseDto,
-      SendEmailDto,
-      BulkSendEmailDto,
-      BulkAcceptResponseDto,
-      BulkStatusResponseDto,
-      BulkMessagesResponseDto,
-      AcceptEmailResponseDto,
-      MessageResponseDto,
-      ErrorResponseDto,
-    ],
-  });
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup("docs", app, document, {
     jsonDocumentUrl: "docs-json",
     swaggerOptions: {

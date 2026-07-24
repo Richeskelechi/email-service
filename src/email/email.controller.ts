@@ -14,17 +14,17 @@ import {
   ApiBody,
   ApiOperation,
   ApiParam,
-  ApiQuery,
-  ApiResponse,
   ApiSecurity,
   ApiTags,
 } from "@nestjs/swagger";
 import { ApiKeyGuard } from "../auth/api-key.guard";
 import { CurrentAuth } from "../auth/current-auth.decorator";
 import type { AuthContext } from "../auth/auth.types";
-import { ErrorResponseDto } from "../common/dto/error-response.dto";
+import { ApiWrappedResponse } from "../common/decorators/api-wrapped-response.decorator";
+import { ResponseMessage } from "../common/decorators/response-message.decorator";
 import {
   BulkAcceptResponseDto,
+  BulkMessagesQueryDto,
   BulkMessagesResponseDto,
   BulkStatusResponseDto,
 } from "./dto/bulk-response.dto";
@@ -48,16 +48,17 @@ export class EmailController {
 
   @Post("send")
   @HttpCode(202)
+  @ResponseMessage("Email accepted")
   @ApiOperation({
     summary: "Accept a single email for delivery",
     description:
-      "test keys simulate only; live keys enqueue SMTP delivery via the worker.",
+      "Requires an org templateId. Renders {{variables}} then queues. test keys simulate only; live keys SMTP via the worker.",
   })
   @ApiBody({ type: SendEmailDto })
-  @ApiResponse({ status: 202, type: AcceptEmailResponseDto })
-  @ApiResponse({ status: 400, type: ErrorResponseDto })
-  @ApiResponse({ status: 401, type: ErrorResponseDto })
-  @ApiResponse({ status: 429, type: ErrorResponseDto })
+  @ApiWrappedResponse({ status: 202, type: AcceptEmailResponseDto })
+  @ApiWrappedResponse({ status: 400 })
+  @ApiWrappedResponse({ status: 401 })
+  @ApiWrappedResponse({ status: 429 })
   async send(
     @CurrentAuth() auth: AuthContext,
     @Body() body: SendEmailDto,
@@ -67,16 +68,17 @@ export class EmailController {
 
   @Post("bulk")
   @HttpCode(202)
+  @ResponseMessage("Bulk email accepted")
   @ApiOperation({
     summary: "Accept a bulk email batch",
     description:
-      "Stores recipients and returns quickly. A worker fans out message rows, then delivers/simulates them.",
+      "Requires an org templateId. Renders per recipient (batch variables + recipient variables), then fans out via the worker.",
   })
   @ApiBody({ type: BulkSendEmailDto })
-  @ApiResponse({ status: 202, type: BulkAcceptResponseDto })
-  @ApiResponse({ status: 400, type: ErrorResponseDto })
-  @ApiResponse({ status: 401, type: ErrorResponseDto })
-  @ApiResponse({ status: 429, type: ErrorResponseDto })
+  @ApiWrappedResponse({ status: 202, type: BulkAcceptResponseDto })
+  @ApiWrappedResponse({ status: 400 })
+  @ApiWrappedResponse({ status: 401 })
+  @ApiWrappedResponse({ status: 429 })
   async sendBulk(
     @CurrentAuth() auth: AuthContext,
     @Body() body: BulkSendEmailDto,
@@ -85,33 +87,27 @@ export class EmailController {
   }
 
   @Get("bulk/:batchId/messages")
-  @ApiOperation({ summary: "List messages in a bulk batch (paginated)" })
+  @ResponseMessage("Bulk messages retrieved successfully")
+  @ApiOperation({ summary: "List messages in a bulk batch (paginated + filters)" })
   @ApiParam({ name: "batchId" })
-  @ApiQuery({ name: "page", required: false, type: Number })
-  @ApiQuery({ name: "limit", required: false, type: Number })
-  @ApiResponse({ status: 200, type: BulkMessagesResponseDto })
-  @ApiResponse({ status: 401, type: ErrorResponseDto })
-  @ApiResponse({ status: 404, type: ErrorResponseDto })
+  @ApiWrappedResponse({ status: 200, type: BulkMessagesResponseDto })
+  @ApiWrappedResponse({ status: 401 })
+  @ApiWrappedResponse({ status: 404 })
   async listBulkMessages(
     @CurrentAuth() auth: AuthContext,
     @Param("batchId") batchId: string,
-    @Query("page") page?: string,
-    @Query("limit") limit?: string,
+    @Query() query: BulkMessagesQueryDto,
   ): Promise<BulkMessagesResponseDto> {
-    return this.emailService.listBulkMessages(
-      auth,
-      batchId,
-      page ? Number(page) : 1,
-      limit ? Number(limit) : 50,
-    );
+    return this.emailService.listBulkMessages(auth, batchId, query);
   }
 
   @Get("bulk/:batchId")
+  @ResponseMessage("Bulk status retrieved successfully")
   @ApiOperation({ summary: "Get bulk batch status counts" })
   @ApiParam({ name: "batchId", description: "Batch id from POST /v1/email/bulk" })
-  @ApiResponse({ status: 200, type: BulkStatusResponseDto })
-  @ApiResponse({ status: 401, type: ErrorResponseDto })
-  @ApiResponse({ status: 404, type: ErrorResponseDto })
+  @ApiWrappedResponse({ status: 200, type: BulkStatusResponseDto })
+  @ApiWrappedResponse({ status: 401 })
+  @ApiWrappedResponse({ status: 404 })
   async getBulk(
     @CurrentAuth() auth: AuthContext,
     @Param("batchId") batchId: string,
@@ -120,11 +116,12 @@ export class EmailController {
   }
 
   @Get(":id")
+  @ResponseMessage("Message retrieved successfully")
   @ApiOperation({ summary: "Get message status by id" })
   @ApiParam({ name: "id", description: "Message id" })
-  @ApiResponse({ status: 200, type: MessageResponseDto })
-  @ApiResponse({ status: 401, type: ErrorResponseDto })
-  @ApiResponse({ status: 404, type: ErrorResponseDto })
+  @ApiWrappedResponse({ status: 200, type: MessageResponseDto })
+  @ApiWrappedResponse({ status: 401 })
+  @ApiWrappedResponse({ status: 404 })
   async getOne(
     @CurrentAuth() auth: AuthContext,
     @Param("id") id: string,

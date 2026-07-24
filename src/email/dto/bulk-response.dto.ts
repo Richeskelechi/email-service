@@ -1,4 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { IsIn, IsOptional, IsString } from "class-validator";
+import { PaginationQueryDto } from "../../common/pagination";
 import { MessageResponseDto } from "./message-response.dto";
 
 export class BulkAcceptResponseDto {
@@ -13,7 +15,8 @@ export class BulkAcceptResponseDto {
 
   @ApiProperty({
     enum: ["pending_fanout", "expanding", "ready"],
-    description: "pending_fanout until the worker expands recipients into messages",
+    description:
+      "pending_fanout until the worker expands recipients into messages",
   })
   status!: "pending_fanout" | "expanding" | "ready";
 }
@@ -48,7 +51,10 @@ export class BulkStatusResponseDto {
   @ApiProperty({ type: Number })
   total!: number;
 
-  @ApiProperty({ type: Number, description: "Recipients expanded into message rows so far" })
+  @ApiProperty({
+    type: Number,
+    description: "Recipients expanded into message rows so far",
+  })
   fannedOut!: number;
 
   @ApiProperty({ type: String })
@@ -61,27 +67,36 @@ export class BulkStatusResponseDto {
   createdAt!: Date;
 }
 
-export class BulkMessagesQueryDto {
-  @ApiPropertyOptional({ type: Number, default: 1, minimum: 1 })
-  page?: number;
-
-  @ApiPropertyOptional({ type: Number, default: 50, minimum: 1, maximum: 100 })
-  limit?: number;
+export class BulkMessagesQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({
+    enum: ["accepted", "sending", "sent", "simulated", "failed"],
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(["accepted", "sending", "sent", "simulated", "failed"])
+  status?: "accepted" | "sending" | "sent" | "simulated" | "failed";
 }
 
 export class BulkMessagesResponseDto {
   @ApiProperty({ type: String })
   batchId!: string;
 
-  @ApiProperty({ type: Number })
-  page!: number;
-
-  @ApiProperty({ type: Number })
-  limit!: number;
-
-  @ApiProperty({ type: Number })
-  total!: number;
-
   @ApiProperty({ type: [MessageResponseDto] })
-  messages!: MessageResponseDto[];
+  items!: MessageResponseDto[];
+
+  @ApiProperty({
+    type: "object",
+    properties: {
+      page: { type: "number" },
+      limit: { type: "number" },
+      total: { type: "number" },
+      totalPages: { type: "number" },
+    },
+  })
+  meta!: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 }

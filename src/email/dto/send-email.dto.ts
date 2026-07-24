@@ -1,15 +1,22 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsEmail,
-  IsNotEmpty,
+  IsObject,
   IsOptional,
   IsString,
-  MaxLength,
   MinLength,
-  ValidateIf,
 } from "class-validator";
 
 export class SendEmailDto {
+  @ApiProperty({
+    type: String,
+    description: "Org template id to render and send",
+    example: "clxtemplate...",
+  })
+  @IsString()
+  @MinLength(1)
+  templateId!: string;
+
   @ApiPropertyOptional({
     type: String,
     example: "noreply@example.com",
@@ -26,35 +33,13 @@ export class SendEmailDto {
   @IsEmail()
   to!: string;
 
-  @ApiProperty({
-    type: String,
-    example: "Hello",
-    maxLength: 998,
-  })
-  @IsString()
-  @MinLength(1)
-  @MaxLength(998)
-  subject!: string;
-
   @ApiPropertyOptional({
-    type: String,
-    example: "Plain text body",
-    description: "Plain-text body. Required if html is omitted.",
+    type: "object",
+    additionalProperties: true,
+    example: { name: "Ada", organizationName: "Acme" },
+    description: "Values for {{placeholders}} in the template",
   })
-  @ValidateIf((o: SendEmailDto) => !o.html)
-  @IsNotEmpty({ message: "Provide text and/or html body" })
-  @IsString()
-  @MaxLength(100_000)
-  text?: string;
-
-  @ApiPropertyOptional({
-    type: String,
-    example: "<p>HTML body</p>",
-    description: "HTML body. Required if text is omitted.",
-  })
-  @ValidateIf((o: SendEmailDto) => !o.text)
-  @IsNotEmpty({ message: "Provide text and/or html body" })
-  @IsString()
-  @MaxLength(200_000)
-  html?: string;
+  @IsOptional()
+  @IsObject()
+  variables?: Record<string, string | number | boolean>;
 }

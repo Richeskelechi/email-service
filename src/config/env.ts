@@ -18,6 +18,9 @@ const envSchema = z.object({
   WORKER_FANOUT_CHUNK: z.coerce.number().int().positive().default(100),
   BULK_MAX_RECIPIENTS: z.coerce.number().int().positive().default(1000),
   ORG_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
+  APP_BASE_URL: z.string().url().default("http://127.0.0.1:3070"),
+  PASSWORD_SETUP_TOKEN_TTL_HOURS: z.coerce.number().int().positive().default(48),
+  SESSION_TTL_DAYS: z.coerce.number().int().positive().default(30),
 });
 
 export const env = envSchema.parse(process.env);
