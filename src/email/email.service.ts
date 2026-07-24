@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -19,14 +20,31 @@ import type {
   BulkStatusResponseDto,
 } from "./dto/bulk-response.dto";
 import { assertOrgSendQuota } from "./rate-limit";
+import {
+  normalizePagination,
+  paginatedResult,
+} from "../common/pagination";
+import type { MessageStatus } from "@prisma/client";
+import { TemplatesService } from "../templates/templates.service";
 
 @Injectable()
 export class EmailService {
+  constructor(
+    @Inject(TemplatesService)
+    private readonly templatesService: TemplatesService,
+  ) {}
+
   async send(
     auth: AuthContext,
     input: SendEmailDto,
   ): Promise<AcceptEmailResponseDto> {
     await assertOrgSendQuota(auth.organizationId, 1);
+
+    const rendered = await this.templatesService.renderOrgTemplate(
+      auth.organizationId,
+      input.templateId,
+      input.variables ?? {},
+    );
 
     const message = await prisma.message.create({
       data: {
@@ -36,9 +54,9 @@ export class EmailService {
         status: "accepted",
         fromEmail: input.from ?? env.MAIL_FROM_DEFAULT,
         toEmail: input.to,
-        subject: input.subject,
-        textBody: input.text,
-        htmlBody: input.html,
+        subject: rendered.subject,
+        textBody: rendered.text,
+        htmlBody: rendered.html,
       },
     });
 
@@ -63,6 +81,39 @@ export class EmailService {
 
     await assertOrgSendQuota(auth.organizationId, input.recipients.length);
 
+    const baseVariables = input.variables ?? {};
+    const storedRecipients: Array<{
+      to: string;
+      subject: string;
+      text?: string;
+      html?: string;
+    }> = [];
+
+    let batchSubject = "";
+    let batchText: string | undefined;
+    let batchHtml: string | undefined;
+
+    for (const recipient of input.recipients) {
+      const rendered = await this.templatesService.renderOrgTemplate(
+        auth.organizationId,
+        input.templateId,
+        { ...baseVariables, ...(recipient.variables ?? {}) },
+      );
+
+      if (!batchSubject) {
+        batchSubject = rendered.subject;
+        batchText = rendered.text;
+        batchHtml = rendered.html;
+      }
+
+      storedRecipients.push({
+        to: recipient.to,
+        subject: rendered.subject,
+        text: rendered.text,
+        html: rendered.html,
+      });
+    }
+
     const batch = await prisma.emailBatch.create({
       data: {
         organizationId: auth.organizationId,
@@ -71,11 +122,11 @@ export class EmailService {
         status: "pending_fanout",
         total: input.recipients.length,
         fannedOut: 0,
-        subject: input.subject,
+        subject: batchSubject,
         fromEmail: input.from ?? env.MAIL_FROM_DEFAULT,
-        textBody: input.text,
-        htmlBody: input.html,
-        recipients: input.recipients as unknown as Prisma.InputJsonValue,
+        textBody: batchText,
+        htmlBody: batchHtml,
+        recipients: storedRecipients as unknown as Prisma.InputJsonValue,
       },
     });
 
@@ -135,11 +186,15 @@ export class EmailService {
   async listBulkMessages(
     auth: AuthContext,
     batchId: string,
-    page = 1,
-    limit = 50,
+    query: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      status?: MessageStatus;
+      sortOrder?: "asc" | "desc";
+    },
   ): Promise<BulkMessagesResponseDto> {
-    const safePage = Math.max(1, page);
-    const safeLimit = Math.min(100, Math.max(1, limit));
+    const { page, limit, skip, take } = normalizePagination(query);
 
     const batch = await prisma.emailBatch.findFirst({
       where: {
@@ -153,23 +208,36 @@ export class EmailService {
       throw new NotFoundException({ error: "batch_not_found" });
     }
 
-    const where = { batchId, organizationId: auth.organizationId };
+    const where: Prisma.MessageWhereInput = {
+      batchId,
+      organizationId: auth.organizationId,
+    };
+
+    if (query.status) {
+      where.status = query.status;
+    }
+
+    if (query.search?.trim()) {
+      const q = query.search.trim();
+      where.OR = [
+        { toEmail: { contains: q, mode: "insensitive" } },
+        { fromEmail: { contains: q, mode: "insensitive" } },
+        { subject: { contains: q, mode: "insensitive" } },
+      ];
+    }
+
     const [total, rows] = await Promise.all([
       prisma.message.count({ where }),
       prisma.message.findMany({
         where,
-        orderBy: { createdAt: "asc" },
-        skip: (safePage - 1) * safeLimit,
-        take: safeLimit,
+        orderBy: { createdAt: query.sortOrder ?? "asc" },
+        skip,
+        take,
       }),
     ]);
 
-    return {
-      batchId,
-      page: safePage,
-      limit: safeLimit,
-      total,
-      messages: rows.map((message) => ({
+    const pageResult = paginatedResult(
+      rows.map((message) => ({
         id: message.id,
         status: message.status,
         mode: message.mode,
@@ -182,6 +250,15 @@ export class EmailService {
         createdAt: message.createdAt,
         sentAt: message.sentAt,
       })),
+      total,
+      page,
+      limit,
+    );
+
+    return {
+      batchId,
+      items: pageResult.items,
+      meta: pageResult.meta,
     };
   }
 

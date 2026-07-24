@@ -7,7 +7,7 @@ export type { IssuedApiKey } from "./api-keys.types";
 
 type Tx = Prisma.TransactionClient;
 
-async function insertApiKey(
+export async function insertApiKey(
   tx: Tx,
   input: {
     organizationId: string;
@@ -35,38 +35,6 @@ async function insertApiKey(
     secret,
     organizationId: row.organizationId,
   };
-}
-
-export async function createOrganization(input: {
-  name: string;
-  id?: string;
-}): Promise<{
-  organization: { id: string; name: string };
-  testKey: IssuedApiKey;
-  liveKey: IssuedApiKey;
-}> {
-  return prisma.$transaction(async (tx) => {
-    const organization = await tx.organization.create({
-      data: {
-        id: input.id,
-        name: input.name,
-      },
-    });
-
-    const testKey = await insertApiKey(tx, {
-      organizationId: organization.id,
-      name: "Test",
-      mode: "test",
-    });
-
-    const liveKey = await insertApiKey(tx, {
-      organizationId: organization.id,
-      name: "Live",
-      mode: "live",
-    });
-
-    return { organization, testKey, liveKey };
-  });
 }
 
 export async function ensureDefaultApiKeys(organizationId: string): Promise<{
