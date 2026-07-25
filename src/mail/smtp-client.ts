@@ -22,7 +22,10 @@ function encodeSubject(subject: string): string {
   return `=?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`;
 }
 
-export function buildMimeMessage(mail: OutboundMail): { raw: string; messageId: string } {
+export function buildMimeMessage(mail: OutboundMail): {
+  raw: string;
+  messageId: string;
+} {
   assertNoCrlf(mail.from, "from");
   assertNoCrlf(mail.to, "to");
   assertNoCrlf(mail.subject, "subject");
@@ -92,15 +95,31 @@ class SmtpSession {
     });
   }
 
+  setSocket(socket: Socket | TLSSocket): void {
+    this.socket.removeAllListeners("data");
+    this.socket.removeAllListeners("error");
+    this.socket = socket;
+    this.buffer = "";
+    this.socket.on("data", (chunk: Buffer) => {
+      this.buffer += chunk.toString("utf8");
+      this.flush();
+    });
+    this.socket.on("error", (err: Error) => {
+      const waiters = this.waiters.splice(0);
+      for (const w of waiters) w.reject(err);
+    });
+  }
+
   async greeting(): Promise<void> {
     await this.readResponse();
   }
 
-  async command(cmd: string, expect = 250): Promise<string> {
+  async command(cmd: string, expect: number | number[] = 250): Promise<string> {
     this.socket.write(`${cmd}\r\n`);
     const response = await this.readResponse();
     const code = Number(response.slice(0, 3));
-    if (code !== expect) {
+    const allowed = Array.isArray(expect) ? expect : [expect];
+    if (!allowed.includes(code)) {
       throw new Error(`smtp_error: ${response.trim()}`);
     }
     return response;
@@ -116,6 +135,32 @@ class SmtpSession {
     if (code !== 250) {
       throw new Error(`smtp_data_error: ${response.trim()}`);
     }
+  }
+
+  async authLogin(user: string, pass: string): Promise<void> {
+    await this.command("AUTH LOGIN", 334);
+    await this.command(Buffer.from(user, "utf8").toString("base64"), 334);
+    await this.command(Buffer.from(pass, "utf8").toString("base64"), 235);
+  }
+
+  async startTlsUpgrade(host: string): Promise<void> {
+    await this.command("STARTTLS", 220);
+    const plain = this.socket as Socket;
+    const tlsSocket = await new Promise<TLSSocket>((resolve, reject) => {
+      const upgraded = tlsConnect(
+        {
+          socket: plain,
+          host,
+          servername: host,
+        },
+        () => {
+          upgraded.off("error", reject);
+          resolve(upgraded);
+        },
+      );
+      upgraded.once("error", reject);
+    });
+    this.setSocket(tlsSocket);
   }
 
   private flush(): void {
@@ -156,12 +201,14 @@ class SmtpSession {
 }
 
 function connectSocket(): Promise<Socket | TLSSocket> {
+  const { host, port, secure } = env.smtp;
+
   return new Promise((resolve, reject) => {
     const onError = (err: Error) => reject(err);
 
-    if (env.SMTP_SECURE) {
+    if (secure) {
       const socket = tlsConnect(
-        { host: env.SMTP_HOST, port: env.SMTP_PORT, servername: env.SMTP_HOST },
+        { host, port, servername: host },
         () => {
           socket.off("error", onError);
           resolve(socket);
@@ -171,31 +218,91 @@ function connectSocket(): Promise<Socket | TLSSocket> {
       return;
     }
 
-    const socket = createConnection(
-      { host: env.SMTP_HOST, port: env.SMTP_PORT },
-      () => {
-        socket.off("error", onError);
-        resolve(socket);
-      },
-    );
+    const socket = createConnection({ host, port }, () => {
+      socket.off("error", onError);
+      resolve(socket);
+    });
     socket.once("error", onError);
   });
 }
 
 export async function sendSmtp(mail: OutboundMail): Promise<string> {
-  const { raw, messageId } = buildMimeMessage(mail);
-  const socket = await connectSocket();
-  const session = new SmtpSession(socket);
+  const transport = describeMailTransport();
+  const startedAt = Date.now();
+
+  console.log(
+    JSON.stringify({
+      event: "email.sending",
+      provider: env.smtp.provider,
+      transport,
+      from: mail.from,
+      to: mail.to,
+      subject: mail.subject,
+    }),
+  );
 
   try {
-    await session.greeting();
-    await session.command("EHLO localhost");
-    await session.command(`MAIL FROM:<${mail.from}>`);
-    await session.command(`RCPT TO:<${mail.to}>`);
-    await session.data(raw);
-    await session.command("QUIT", 221);
-    return messageId;
-  } finally {
-    session.end();
+    const { raw, messageId } = buildMimeMessage(mail);
+    const socket = await connectSocket();
+    const session = new SmtpSession(socket);
+    const { host, startTls, user, pass } = env.smtp;
+
+    try {
+      await session.greeting();
+      await session.command(`EHLO localhost`);
+
+      if (startTls && !env.smtp.secure) {
+        await session.startTlsUpgrade(host);
+        await session.command(`EHLO localhost`);
+      }
+
+      if (user && pass) {
+        await session.authLogin(user, pass);
+      }
+
+      await session.command(`MAIL FROM:<${mail.from}>`);
+      await session.command(`RCPT TO:<${mail.to}>`);
+      await session.data(raw);
+      await session.command("QUIT", 221);
+
+      console.log(
+        JSON.stringify({
+          event: "email.sent",
+          provider: env.smtp.provider,
+          transport,
+          from: mail.from,
+          to: mail.to,
+          subject: mail.subject,
+          messageId,
+          durationMs: Date.now() - startedAt,
+        }),
+      );
+
+      return messageId;
+    } finally {
+      session.end();
+    }
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    console.error(
+      JSON.stringify({
+        event: "email.failed",
+        provider: env.smtp.provider,
+        transport,
+        from: mail.from,
+        to: mail.to,
+        subject: mail.subject,
+        error,
+        durationMs: Date.now() - startedAt,
+      }),
+    );
+    throw err;
   }
+}
+
+export function describeMailTransport(): string {
+  const s = env.smtp;
+  const auth = s.user ? `auth=${s.user}` : "auth=none";
+  const tls = s.secure ? "tls=implicit" : s.startTls ? "tls=starttls" : "tls=off";
+  return `${s.provider} ${s.host}:${s.port} (${tls}, ${auth})`;
 }
