@@ -8,6 +8,7 @@ import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { ResponseInterceptor } from "./common/interceptors/response.interceptor";
 import { env } from "./config/env";
 import { prisma } from "./db/prisma";
+import { describeMailTransport } from "./mail/smtp-client";
 import { PermissionsService } from "./permissions/permissions.service";
 import { TemplatesService } from "./templates/templates.service";
 
@@ -23,6 +24,10 @@ async function bootstrap() {
   console.log("[templates] starting system sync…");
   await templatesService.syncSystemTemplates();
   console.log("[templates] system sync finished");
+
+  console.log(
+    `[mail] NODE_ENV=${env.NODE_ENV} → ${describeMailTransport()}`,
+  );
 
   app.useGlobalPipes(
     new ValidationPipe({

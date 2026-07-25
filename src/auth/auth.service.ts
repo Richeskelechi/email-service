@@ -90,13 +90,45 @@ export class AuthService {
       inviterEmail: input.inviterEmail ?? "",
     });
 
-    await sendSmtp({
-      from: env.MAIL_FROM_DEFAULT,
-      to: input.to,
-      subject: rendered.subject,
-      text: rendered.text,
-      html: rendered.html,
-    });
+    console.log(
+      JSON.stringify({
+        event: "auth.email.sending",
+        purpose,
+        templateKey: key,
+        to: input.to,
+        organizationName: input.organizationName,
+      }),
+    );
+
+    try {
+      const messageId = await sendSmtp({
+        from: env.MAIL_FROM_DEFAULT,
+        to: input.to,
+        subject: rendered.subject,
+        text: rendered.text,
+        html: rendered.html,
+      });
+      console.log(
+        JSON.stringify({
+          event: "auth.email.sent",
+          purpose,
+          templateKey: key,
+          to: input.to,
+          messageId,
+        }),
+      );
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          event: "auth.email.failed",
+          purpose,
+          templateKey: key,
+          to: input.to,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      throw err;
+    }
   }
 
   async setPassword(input: SetPasswordDto): Promise<SetPasswordResponseDto> {

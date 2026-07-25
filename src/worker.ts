@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { env } from "./config/env";
 import { prisma } from "./db/prisma";
 import { deliverMessage } from "./mail/deliver";
+import { describeMailTransport } from "./mail/smtp-client";
 
 type StoredRecipient = {
   to: string;
@@ -146,14 +147,38 @@ async function deliverOne(message: Message): Promise<void> {
         errorMessage: null,
       },
     });
-    console.log(`sent ${message.id} -> ${message.toEmail}`);
+    console.log(
+      JSON.stringify({
+        event: "email.delivered",
+        id: message.id,
+        organizationId: message.organizationId,
+        mode: message.mode,
+        from: message.fromEmail,
+        to: message.toEmail,
+        subject: message.subject,
+        providerId,
+        status: "sent",
+      }),
+    );
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     await prisma.message.update({
       where: { id: message.id },
       data: { status: "failed", errorMessage },
     });
-    console.error(`failed ${message.id}: ${errorMessage}`);
+    console.error(
+      JSON.stringify({
+        event: "email.delivery_failed",
+        id: message.id,
+        organizationId: message.organizationId,
+        mode: message.mode,
+        from: message.fromEmail,
+        to: message.toEmail,
+        subject: message.subject,
+        status: "failed",
+        error: errorMessage,
+      }),
+    );
   }
 }
 
@@ -179,8 +204,9 @@ async function loop(): Promise<void> {
   console.log(
     JSON.stringify({
       event: "worker.started",
+      nodeEnv: env.NODE_ENV,
       pollMs: env.WORKER_POLL_MS,
-      smtp: `${env.SMTP_HOST}:${env.SMTP_PORT}`,
+      smtp: describeMailTransport(),
       batchSize: env.WORKER_BATCH_SIZE,
       concurrency: env.WORKER_CONCURRENCY,
       fanoutChunk: env.WORKER_FANOUT_CHUNK,
