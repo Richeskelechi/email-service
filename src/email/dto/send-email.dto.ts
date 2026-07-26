@@ -19,7 +19,7 @@ export class SendEmailDto {
 
   @ApiPropertyOptional({
     type: String,
-    example: "noreply@example.com",
+    example: "noreply@citygroupsavings.com",
     description: "From address (defaults to platform default if omitted)",
   })
   @IsOptional()

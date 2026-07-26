@@ -39,7 +39,7 @@ export class BulkSendEmailDto {
 
   @ApiPropertyOptional({
     type: String,
-    example: "noreply@example.com",
+    example: "noreply@citygroupsavings.com",
   })
   @IsOptional()
   @IsEmail()

@@ -26,7 +26,7 @@ const envSchema = z
     /** Staging (Resend) API key — used as SMTP password when NODE_ENV=staging. */
     RESEND_API_KEY: z.string().optional(),
 
-    MAIL_FROM_DEFAULT: z.email().default("beth.t@example.com"),
+    MAIL_FROM_DEFAULT: z.email().default("noreply@citygroupsavings.com"),
     WORKER_POLL_MS: z.coerce.number().int().positive().default(2000),
     WORKER_BATCH_SIZE: z.coerce.number().int().positive().default(20),
     WORKER_CONCURRENCY: z.coerce.number().int().positive().default(5),
