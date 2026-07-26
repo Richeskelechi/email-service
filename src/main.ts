@@ -11,9 +11,11 @@ import { prisma } from "./db/prisma";
 import { describeMailTransport } from "./mail/smtp-client";
 import { PermissionsService } from "./permissions/permissions.service";
 import { TemplatesService } from "./templates/templates.service";
+import { startOutboxWorker } from "./worker/outbox-worker";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  let stopWorker: (() => void) | undefined;
 
   const permissionsService = app.get(PermissionsService);
   console.log("[permissions] starting sync…");
@@ -75,6 +77,7 @@ async function bootstrap() {
   });
 
   const shutdown = async () => {
+    stopWorker?.();
     await app.close();
     await prisma.$disconnect();
     process.exit(0);
@@ -86,6 +89,17 @@ async function bootstrap() {
   await app.listen(env.PORT, "0.0.0.0");
   console.log(`API http://127.0.0.1:${env.PORT}`);
   console.log(`Swagger http://127.0.0.1:${env.PORT}/docs`);
+
+  if (env.WORKER_EMBEDDED) {
+    stopWorker = startOutboxWorker({ embedded: true }).stop;
+  } else {
+    console.log(
+      JSON.stringify({
+        event: "worker.embedded_disabled",
+        message: "Run npm run start:worker (or dev:worker) separately",
+      }),
+    );
+  }
 }
 
 bootstrap().catch(async (err) => {

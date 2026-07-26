@@ -56,14 +56,20 @@ npx prisma migrate dev
 
 On boot the API logs: `[mail] NODE_ENV=local → mailpit 127.0.0.1:1025 …`
 
-## Run (two terminals)
+## Run
+
+By default the API also drains the outbox (`WORKER_EMBEDDED=true`). One terminal is enough:
 
 ```bash
-# Terminal 1 — API
 npm run dev
+```
 
-# Terminal 2 — outbox worker (SMTP → Mailpit)
-npm run dev:worker
+To run the worker as a separate process later (scale-out):
+
+```bash
+# .env → WORKER_EMBEDDED=false
+npm run dev          # API only
+npm run dev:worker   # outbox worker
 ```
 
 Swagger UI: http://127.0.0.1:3000/docs
