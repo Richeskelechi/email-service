@@ -6,11 +6,12 @@
   "scripts": {
     "dev": "node --watch -r ts-node/register/transpile-only src/main.ts",
     "dev:worker": "node --watch -r ts-node/register/transpile-only src/worker.ts",
-    "build": "tsc",
+    "build": "prisma generate && tsc",
     "start": "node dist/main.js",
     "start:worker": "node dist/worker.js",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
     "db:studio": "prisma studio",
     "typecheck": "tsc --noEmit"
   },

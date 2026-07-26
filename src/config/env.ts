@@ -33,7 +33,13 @@ const envSchema = z
     WORKER_FANOUT_CHUNK: z.coerce.number().int().positive().default(100),
     BULK_MAX_RECIPIENTS: z.coerce.number().int().positive().default(1000),
     ORG_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
-    APP_BASE_URL: z.url().default("http://127.0.0.1:3070"),
+    APP_BASE_URL: z.preprocess(
+      (value) => {
+        if (typeof value === "string" && value.length > 0) return value;
+        return process.env.RENDER_EXTERNAL_URL ?? "http://127.0.0.1:3070";
+      },
+      z.url(),
+    ),
     PASSWORD_SETUP_TOKEN_TTL_HOURS: z.coerce
       .number()
       .int()
