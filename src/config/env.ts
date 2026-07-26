@@ -26,14 +26,14 @@ const envSchema = z
     /** Staging (Resend) API key — used as SMTP password when NODE_ENV=staging. */
     RESEND_API_KEY: z.string().optional(),
 
-    MAIL_FROM_DEFAULT: z.string().email().default("noreply@example.com"),
+    MAIL_FROM_DEFAULT: z.email().default("beth.t@example.com"),
     WORKER_POLL_MS: z.coerce.number().int().positive().default(2000),
     WORKER_BATCH_SIZE: z.coerce.number().int().positive().default(20),
     WORKER_CONCURRENCY: z.coerce.number().int().positive().default(5),
     WORKER_FANOUT_CHUNK: z.coerce.number().int().positive().default(100),
     BULK_MAX_RECIPIENTS: z.coerce.number().int().positive().default(1000),
     ORG_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
-    APP_BASE_URL: z.string().url().default("http://127.0.0.1:3070"),
+    APP_BASE_URL: z.url().default("http://127.0.0.1:3070"),
     PASSWORD_SETUP_TOKEN_TTL_HOURS: z.coerce
       .number()
       .int()
