@@ -226,20 +226,26 @@ function connectSocket(): Promise<Socket | TLSSocket> {
   });
 }
 
-export async function sendSmtp(mail: OutboundMail): Promise<string> {
+export async function sendSmtp(
+  mail: OutboundMail,
+  options?: { log?: boolean },
+): Promise<string> {
+  const log = options?.log !== false;
   const transport = describeMailTransport();
   const startedAt = Date.now();
 
-  console.log(
-    JSON.stringify({
-      event: "email.sending",
-      provider: env.smtp.provider,
-      transport,
-      from: mail.from,
-      to: mail.to,
-      subject: mail.subject,
-    }),
-  );
+  if (log) {
+    console.log(
+      JSON.stringify({
+        event: "email.sending",
+        provider: env.smtp.provider,
+        transport,
+        from: mail.from,
+        to: mail.to,
+        subject: mail.subject,
+      }),
+    );
+  }
 
   try {
     const { raw, messageId } = buildMimeMessage(mail);
@@ -265,43 +271,50 @@ export async function sendSmtp(mail: OutboundMail): Promise<string> {
       await session.data(raw);
       await session.command("QUIT", 221);
 
-      console.log(
-        JSON.stringify({
-          event: "email.sent",
-          provider: env.smtp.provider,
-          transport,
-          from: mail.from,
-          to: mail.to,
-          subject: mail.subject,
-          messageId,
-          durationMs: Date.now() - startedAt,
-        }),
-      );
+      if (log) {
+        console.log(
+          JSON.stringify({
+            event: "email.sent",
+            provider: env.smtp.provider,
+            transport,
+            from: mail.from,
+            to: mail.to,
+            subject: mail.subject,
+            messageId,
+            durationMs: Date.now() - startedAt,
+          }),
+        );
+      }
 
       return messageId;
     } finally {
       session.end();
     }
   } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
-    console.error(
-      JSON.stringify({
-        event: "email.failed",
-        provider: env.smtp.provider,
-        transport,
-        from: mail.from,
-        to: mail.to,
-        subject: mail.subject,
-        error,
-        durationMs: Date.now() - startedAt,
-      }),
-    );
+    if (log) {
+      const error = err instanceof Error ? err.message : String(err);
+      console.error(
+        JSON.stringify({
+          event: "email.failed",
+          provider: env.smtp.provider,
+          transport,
+          from: mail.from,
+          to: mail.to,
+          subject: mail.subject,
+          error,
+          durationMs: Date.now() - startedAt,
+        }),
+      );
+    }
     throw err;
   }
 }
 
 export function describeMailTransport(): string {
   const s = env.smtp;
+  if (s.provider === "resend") {
+    return "resend https://api.resend.com (https api)";
+  }
   const auth = s.user ? `auth=${s.user}` : "auth=none";
   const tls = s.secure ? "tls=implicit" : s.startTls ? "tls=starttls" : "tls=off";
   return `${s.provider} ${s.host}:${s.port} (${tls}, ${auth})`;

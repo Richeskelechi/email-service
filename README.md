@@ -51,7 +51,7 @@ npx prisma migrate dev
 | `NODE_ENV` | Transport | Config |
 |------------|-----------|--------|
 | `local` (default) | Mailpit | `127.0.0.1:1025` |
-| `staging` | Resend SMTP | `RESEND_API_KEY` required; `MAIL_FROM_DEFAULT` must be allowed by Resend |
+| `staging` | Resend **HTTPS API** | `RESEND_API_KEY` required (SMTP blocked on Render free tier) |
 | `production` | Your SMTP/MTA | `SMTP_HOST` required; optional `SMTP_USER` / `SMTP_PASS` / `SMTP_STARTTLS` |
 
 On boot the API logs: `[mail] NODE_ENV=local → mailpit 127.0.0.1:1025 …`
