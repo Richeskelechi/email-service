@@ -17,7 +17,6 @@ services:
     branch: staging
     healthCheckPath: /health
     buildCommand: npm ci --include=dev && npx prisma generate && npm run build
-    preDeployCommand: npx prisma migrate deploy
     startCommand: npm start
     envVars:
       - key: NODE_ENV
