@@ -27,6 +27,11 @@ const envSchema = z
     RESEND_API_KEY: z.string().optional(),
 
     MAIL_FROM_DEFAULT: z.email().default("noreply@citygroupsavings.com"),
+    /**
+     * When true (default), the API process also drains the outbox.
+     * Set false and run `npm run start:worker` to scale the worker separately.
+     */
+    WORKER_EMBEDDED: optionalBool.default(true),
     WORKER_POLL_MS: z.coerce.number().int().positive().default(2000),
     WORKER_BATCH_SIZE: z.coerce.number().int().positive().default(20),
     WORKER_CONCURRENCY: z.coerce.number().int().positive().default(5),

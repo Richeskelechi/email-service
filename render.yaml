@@ -1,10 +1,10 @@
-# Render Blueprint — API + outbox worker + Postgres
+# Render Blueprint — single web service (API + embedded outbox worker) + Postgres
 # Dashboard: New → Blueprint → connect this repo → branch `staging`
-# Docs: https://render.com/docs/blueprint-spec
+# Later: set WORKER_EMBEDDED=false and add a Background Worker (`npm run start:worker`)
 
 databases:
   - name: my-email-db
-    plan: basic-256mb
+    plan: free
     databaseName: my_email
     user: my_email
 
@@ -12,7 +12,7 @@ services:
   - type: web
     name: my-email-api
     runtime: node
-    plan: starter
+    plan: free
     region: oregon
     branch: staging
     healthCheckPath: /health
@@ -22,6 +22,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: staging
+      - key: WORKER_EMBEDDED
+        value: "true"
       - key: DATABASE_URL
         fromDatabase:
           name: my-email-db
@@ -48,74 +50,3 @@ services:
         value: "1000"
       - key: ORG_RATE_LIMIT_PER_MINUTE
         value: "120"
-
-  - type: worker
-    name: my-email-worker
-    runtime: node
-    plan: starter
-    region: oregon
-    branch: staging
-    buildCommand: npm ci --include=dev && npx prisma generate && npm run build
-    startCommand: npm run start:worker
-    envVars:
-      - key: NODE_ENV
-        value: staging
-      - key: DATABASE_URL
-        fromDatabase:
-          name: my-email-db
-          property: connectionString
-      - key: DEV_API_KEY
-        fromService:
-          name: my-email-api
-          type: web
-          envVarKey: DEV_API_KEY
-      - key: RESEND_API_KEY
-        fromService:
-          name: my-email-api
-          type: web
-          envVarKey: RESEND_API_KEY
-      - key: MAIL_FROM_DEFAULT
-        fromService:
-          name: my-email-api
-          type: web
-          envVarKey: MAIL_FROM_DEFAULT
-      - key: PASSWORD_SETUP_TOKEN_TTL_HOURS
-        fromService:
-          name: my-email-api
-          type: web
-          envVarKey: PASSWORD_SETUP_TOKEN_TTL_HOURS
-      - key: SESSION_TTL_DAYS
-        fromService:
-          name: my-email-api
-          type: web
-          envVarKey: SESSION_TTL_DAYS
-      - key: WORKER_POLL_MS
-        fromService:
-          name: my-email-api
-          type: web
-          envVarKey: WORKER_POLL_MS
-      - key: WORKER_BATCH_SIZE
-        fromService:
-          name: my-email-api
-          type: web
-          envVarKey: WORKER_BATCH_SIZE
-      - key: WORKER_CONCURRENCY
-        fromService:
-          name: my-email-api
-          type: web
-          envVarKey: WORKER_CONCURRENCY
-      - key: WORKER_FANOUT_CHUNK
-        fromService:
-          name: my-email-api
-          type: web
-          envVarKey: WORKER_FANOUT_CHUNK
-      - key: BULK_MAX_RECIPIENTS
-        fromService:
-          name: my-email-api
-          type: web
-          envVarKey: BULK_MAX_RECIPIENTS
-      - key: ORG_RATE_LIMIT_PER_MINUTE
-        fromService:
-          name: my-email-api
-          type: web
-          envVarKey: ORG_RATE_LIMIT_PER_MINUTE
