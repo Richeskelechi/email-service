@@ -9,7 +9,7 @@ import {
 import type { Prisma } from "@prisma/client";
 import { env } from "../config/env";
 import { prisma } from "../db/prisma";
-import { sendSmtp } from "../mail/smtp-client";
+import { sendMail } from "../mail/deliver";
 import { SYSTEM_TEMPLATE_KEYS } from "../templates/system-templates.catalog";
 import { TemplatesService } from "../templates/templates.service";
 import {
@@ -101,7 +101,7 @@ export class AuthService {
     );
 
     try {
-      const messageId = await sendSmtp({
+      const messageId = await sendMail({
         from: env.MAIL_FROM_DEFAULT,
         to: input.to,
         subject: rendered.subject,
